@@ -3,7 +3,7 @@
 // ⚠️ GANTI API_URL setelah deploy Google Apps Script
 // ================================================
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycby7pMyoevjZZXSX8otqEw9bQt1719M31uAALG78RqWxtphZBxNmnvDZUFb3glEfY1Yoxg/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbyv4bGY3xIdO4dnV9A7815OPuirwi6Co1fvHzqVXGxfK99wGxvv3dLoQXA-p19pbHcuKg/exec',
   // Contoh: 'https://script.google.com/macros/s/AKfyc.../exec'
 
   ADMIN_PASSWORD: 'bagir2025',   // ← Ganti password admin di sini
