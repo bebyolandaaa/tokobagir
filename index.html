@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Toko Bagir – Grosir Kue Kering">
+  <title>TOKO BAGIR – Kue Kering </title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══ TOPBAR ═══ -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="logo"><i class="ti ti-cookie"></i></div>
+      <div>
+        <h1 id="toko-name-display">TOKO BAGIR</h1>
+        <p id="toko-tagline-display">Kue Kering </p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <!-- Notif (hanya muncul saat login admin) -->
+      <div id="notif-btn-wrap" style="display:none;position:relative">
+        <button class="notif-btn" id="notif-btn" onclick="toggleNotifPanel()">
+          <i class="ti ti-bell"></i>
+          <span class="notif-dot" id="notif-dot">0</span>
+        </button>
+        <!-- Notif Dropdown -->
+        <div class="notif-panel" id="notif-panel">
+          <div class="notif-header">
+            <span>🔔 Notifikasi</span>
+            <button class="mark-all-btn" onclick="markAllRead()">Tandai semua dibaca</button>
+          </div>
+          <div class="notif-list" id="notif-list">
+            <div class="notif-empty">Belum ada notifikasi</div>
+          </div>
+        </div>
+      </div>
+      <button class="cart-btn" onclick="showPage('cart')">
+        <i class="ti ti-shopping-cart"></i>
+        <span class="cart-text">Keranjang</span>
+        <span class="cart-badge" id="cart-badge">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ═══ NAV TABS ═══ -->
+  <nav class="nav-tabs">
+    <div class="tab active" onclick="showPage('catalog')" id="tab-catalog"><i class="ti ti-layout-grid"></i> Katalog</div>
+    <div class="tab" onclick="showPage('cart')"    id="tab-cart"><i class="ti ti-shopping-cart"></i> Keranjang</div>
+    <div class="tab" onclick="showPage('order')"   id="tab-order"><i class="ti ti-clipboard-list"></i> Pesan</div>
+    <div class="tab" onclick="showPage('history')" id="tab-history"><i class="ti ti-clock"></i> History</div>
+    <div class="tab" onclick="showPage('contact')" id="tab-contact"><i class="ti ti-map-pin"></i> Kontak</div>
+    <div class="tab" onclick="showPage('admin')"   id="tab-admin"><i class="ti ti-settings"></i> Admin</div>
+  </nav>
+
+  <main class="content">
+
+    <!-- ═══ KATALOG ═══ -->
+    <section class="page active" id="page-catalog">
+      <div class="search-bar">
+        <i class="ti ti-search search-icon"></i>
+        <input type="text" placeholder="Cari kue kering..." id="search-input" oninput="filterProducts()">
+      </div>
+      <div class="filter-chips">
+        <span class="chip active" onclick="setFilter('semua',this)">Semua</span>
+        <span class="chip" onclick="setFilter('classic',this)">Pedas</span>
+        <span class="chip" onclick="setFilter('premium',this)">Premium</span>
+        <span class="chip" onclick="setFilter('chocolate',this)">Chocolate</span>
+        <span class="chip" onclick="setFilter('savory',this)">Savory</span>
+      </div>
+      <div class="product-grid" id="product-grid"></div>
+    </section>
+
+    <!-- ═══ KERANJANG ═══ -->
+    <section class="page" id="page-cart">
+      <div class="section-header">
+        <span class="section-title">Keranjang Belanja</span>
+        <button class="clear-btn" onclick="clearCart()">Kosongkan</button>
+      </div>
+      <div id="cart-content"></div>
+    </section>
+
+    <!-- ═══ FORM PEMESANAN ═══ -->
+    <section class="page" id="page-order">
+      <div class="page-order-layout">
+        <div>
+          <!-- Data Pemesan -->
+          <div class="form-card">
+            <div class="form-title"><i class="ti ti-user"></i> Data Pemesan</div>
+            <div class="form-row">
+              <label class="form-label">Nama lengkap *</label>
+              <input class="form-input" type="text" id="f-name" placeholder="Masukkan nama lengkap...">
+            </div>
+            <div class="form-row-2">
+              <div>
+                <label class="form-label">No. WhatsApp *</label>
+                <input class="form-input" type="text" id="f-phone" placeholder="08xx...">
+              </div>
+              <div>
+                <label class="form-label">Tanggal Pemesanan</label>
+                <input class="form-input" type="date" id="f-date">
+              </div>
+            </div>
+          </div>
+
+          <!-- Pengiriman -->
+          <div class="form-card">
+            <div class="form-title"><i class="ti ti-truck"></i> Pengiriman</div>
+            <div class="form-row">
+              <label class="form-label">Metode pengiriman</label>
+              <div class="radio-group" id="delivery-opts">
+                <span class="radio-opt sel" onclick="selectOpt('delivery',this,'pickup')"><i class="ti ti-walk"></i> Ambil sendiri</span>
+                <span class="radio-opt" onclick="selectOpt('delivery',this,'delivery')"><i class="ti ti-truck"></i> Delivery</span>
+              </div>
+            </div>
+            <div class="form-row" id="addr-row" style="display:none">
+              <label class="form-label">Alamat pengiriman *</label>
+              <input class="form-input" type="text" id="f-addr" placeholder="Masukkan alamat lengkap...">
+            </div>
+            <div class="form-row-2" id="ongkir-row" style="display:none">
+              <div>
+                <label class="form-label">Provinsi tujuan *</label>
+                <select class="form-select" id="f-province" onchange="onProvinceChange()">
+                  <option value="">— Pilih Provinsi —</option>
+                </select>
+              </div>
+              <div>
+                <label class="form-label">Kota/Kabupaten tujuan *</label>
+                <select class="form-select" id="f-city" onchange="onCityChange()">
+                  <option value="">— Pilih Kota —</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row" id="ongkir-info" style="display:none">
+              <div style="background:var(--blue-50);border-radius:8px;padding:10px 12px;font-size:12px;display:flex;justify-content:space-between;align-items:center">
+                <span id="ongkir-detail">-</span>
+                <strong id="ongkir-cost">Rp 0</strong>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Tanggal Kirim / Ambil</label>
+              <input class="form-input" type="date" id="f-delivery-date">
+            </div>
+          </div>
+
+          <!-- Pembayaran -->
+          <div class="form-card">
+            <div class="form-title"><i class="ti ti-credit-card"></i> Pembayaran</div>
+            <div class="form-row">
+              <div class="radio-group" id="pay-opts">
+                <span class="radio-opt sel" onclick="selectOpt('pay',this,'transfer')"><i class="ti ti-building-bank"></i> Transfer</span>
+                <span class="radio-opt" onclick="selectOpt('pay',this,'cod')"><i class="ti ti-cash"></i> COD</span>
+                <span class="radio-opt" onclick="selectOpt('pay',this,'qris')"><i class="ti ti-qrcode"></i> QRIS</span>
+              </div>
+            </div>
+            <div id="qris-box"
+       style="display:none;text-align:center;margin-bottom:15px">
+
+    <p style="font-weight:600;margin-bottom:10px">
+      Scan QRIS berikut untuk melakukan pembayaran
+    </p>
+
+    <img
+      src="https://drive.google.com/uc?export=view&id=1y-KqfdJD02s4-XCwuFzbDSyVP-kzMRrT"
+      alt="QRIS"
+      style="
+        max-width:250px;
+        width:100%;
+        border-radius:10px;
+        border:1px solid #ddd;
+      ">
+
+  </div>
+            <!-- Upload bukti transfer / QRIS -->
+            <div class="form-row" id="proof-box" style="display:block">
+              <label class="form-label">Upload Bukti Transfer *</label>
+              <div class="img-upload-box">
+                <input type="file" id="f-proof" accept="image/*" class="form-input" onchange="onProofSelected(event)">
+                <small style="color:#666">Upload screenshot/foto bukti pembayaran kamu.</small>
+                <div class="img-preview-wrap empty" id="proof-preview-wrap"><i class="ti ti-receipt"></i></div>
+              </div>
+            </div>
+            <!-- DP untuk COD ambil sendiri min Rp100.000 -->
+            <div class="form-row" id="dp-box" style="display:none">
+              <div style="background:#FFF7E6;border:1px solid #FFE3A3;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:8px">
+                <i class="ti ti-alert-triangle" style="color:#E69500"></i>
+                Untuk pesanan COD ambil di toko dengan total <strong>≥ Rp100.000</strong>, wajib DP minimal 50% terlebih dahulu.
+              </div>
+              <label class="form-label">Jumlah DP yang sudah dibayar (Rp) *</label>
+              <input class="form-input" type="number" id="f-dp" placeholder="Contoh: 50000">
+              <div style="margin-top:8px">
+                <label class="form-label">Upload Bukti DP *</label>
+                <div class="img-upload-box">
+                  <input type="file" id="f-dp-proof" accept="image/*" class="form-input" onchange="onDpProofSelected(event)">
+                  <div class="img-preview-wrap empty" id="dp-proof-preview-wrap"><i class="ti ti-receipt"></i></div>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <label class="form-label">Catatan (opsional)</label>
+              <input class="form-input" type="text" id="f-note" placeholder="Permintaan khusus, parcel, hamper, dll...">
+            </div>
+          </div>
+        </div>
+
+        <!-- Ringkasan (sticky di desktop) -->
+        <div>
+          <div class="form-card order-summary-card" style="position:sticky;top:130px">
+            <div class="form-title" style="color:var(--blue-800)"><i class="ti ti-receipt"></i> Ringkasan Pesanan</div>
+            <div id="order-summary-items"></div>
+            <div class="summary-total-row">
+              <span>Total</span><span id="order-total-disp">Rp 0</span>
+            </div>
+            <button class="submit-btn" id="order-submit-btn" onclick="submitOrder()" style="margin-top:14px">
+              <i class="ti ti-check"></i> Konfirmasi Pesanan
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ HISTORY PESANAN ═══ -->
+    <section class="page" id="page-history">
+      <div class="section-header">
+        <span class="section-title"><i class="ti ti-clock" style="margin-right:6px"></i>Riwayat Pesanan Saya</span>
+      </div>
+      <p style="font-size:12px;color:var(--gray-400);margin-bottom:14px">Status pesanan diperbarui oleh admin secara real-time.</p>
+      <div id="history-content"></div>
+    </section>
+
+    <!-- ═══ KONTAK & ALAMAT ═══ -->
+    <section class="page" id="page-contact">
+      <div class="contact-hero">
+        <div class="contact-icon"><i class="ti ti-cookie"></i></div>
+        <h2>TOKO BAGIR</h2>
+        <p>Grosir Kue Kering 🍪</p>
+      </div>
+      <div class="contact-grid">
+        <div class="contact-card">
+          <div class="contact-card-icon"><i class="ti ti-map-pin"></i></div>
+          <div class="contact-card-title">Alamat Toko</div>
+          <div class="contact-card-text">
+            Jl. Raya Jamblang - Bunut, Sindangmekar<br>
+            Kec. Depok, Kabupaten Cirebon<br>
+            Jawa Barat 45155
+          </div>
+          <a href="https://share.google/MrpeGusnk18U9RKiA" target="_blank" class="contact-link">
+            <i class="ti ti-external-link"></i> Buka di Google Maps
+          </a>
+        </div>
+        <div class="contact-card">
+          <div class="contact-card-icon" style="background:#E7F9E7;color:#15803D"><i class="ti ti-brand-whatsapp"></i></div>
+          <div class="contact-card-title">WhatsApp</div>
+          <div class="contact-card-text">Nanya Produk.</div>
+          <a href="https://wa.me/6281214793639?text=Halo+Toko+Bagir%2C+saya+mau+bertanya+" target="_blank" class="contact-link" style="color:#15803D">
+            <i class="ti ti-brand-whatsapp"></i> 0812-1479-3639
+          </a>
+        </div>
+        <div class="contact-card">
+          <div class="contact-card-icon" style="background:#fce8f3;color:#c2185b"><i class="ti ti-brand-instagram"></i></div>
+          <div class="contact-card-title">Instagram</div>
+          <div class="contact-card-text">Follow untuk produk terbaru dan promo spesial.</div>
+          <a href="https://instagram.com/tokobagir" target="_blank" class="contact-link" style="color:#c2185b">
+            <i class="ti ti-brand-instagram"></i> @tokobagir
+          </a>
+        </div>
+        <div class="contact-card">
+          <div class="contact-card-icon" style="background:#fff3e0;color:#e65100"><i class="ti ti-clock"></i></div>
+          <div class="contact-card-title">Jam Operasional</div>
+          <div class="contact-card-text">
+            <div class="jam-row"><span>Senin – Jumat</span><strong>08.00 – 20.00</strong></div>
+            <div class="jam-row"><span>Sabtu - minggu </span><strong>08.00 – 21.00</strong></div>
+            <div class="jam-row" style="color:var(--red-700)"><span>Libur</span><strong>Setiap Hari Besar</strong></div>
+          </div>
+        </div>
+      </div>
+      <div class="bank-info">
+        <div class="bank-title"><i class="ti ti-building-bank"></i> Rekening Transfer</div>
+        <div class="bank-row"><span>Bank BSI</span><strong>1234 5678 90</strong><span>a.n. Bagir Toko Kue</span></div>
+        <div class="bank-row"><span>Bank Mandiri</span><strong>0987 6543 21</strong><span>a.n. Bagir Toko Kue</span></div>
+        <div class="bank-row"><span>GoPay / OVO / Dana</span><strong>0822-1966-6556</strong><span></span></div>
+      </div>
+    </section>
+
+    <!-- ═══ ADMIN ═══ -->
+    <section class="page" id="page-admin">
+      <!-- Login -->
+      <div id="admin-login">
+        <div class="login-card">
+          <div class="login-icon"><i class="ti ti-lock"></i></div>
+          <h3>Login Admin</h3>
+          <p>Halaman ini hanya untuk pengelola Toko Bagir</p>
+          <input class="form-input" type="text" id="admin-username" autocomplete="username"
+            placeholder="Username..." style="margin-bottom:8px"
+            onkeydown="if(event.key==='Enter')document.getElementById('admin-password').focus()">
+          <input class="form-input" type="password" id="admin-password" autocomplete="current-password"
+            placeholder="Masukkan password admin..."
+            onkeydown="if(event.key==='Enter')doLogin()" style="margin-bottom:4px">
+          <button class="submit-btn" id="login-btn" onclick="doLogin()" style="margin-top:10px">
+            <i class="ti ti-login"></i> Masuk
+          </button>
+          <p id="login-error" style="color:var(--red-700);font-size:12px;margin-top:10px;display:none">
+            ❌ Username atau password salah!
+          </p>
+        </div>
+      </div>
+      <!-- Panel -->
+      <div id="admin-panel" style="display:none">
+        <div class="admin-topbar">
+          <div class="admin-tabs">
+            <span class="admin-tab active" onclick="showAdminTab('dashboard',this)"><i class="ti ti-dashboard"></i> Dashboard</span>
+            <span class="admin-tab" onclick="showAdminTab('orders',this)"><i class="ti ti-clipboard-list"></i> Pesanan</span>
+            <span class="admin-tab" onclick="showAdminTab('products',this)"><i class="ti ti-box"></i> Produk</span>
+            <span class="admin-tab" onclick="showAdminTab('add-product',this)"><i class="ti ti-plus"></i> Tambah Produk</span>
+            <span class="admin-tab" onclick="showAdminTab('settings',this)"><i class="ti ti-settings"></i> Pengaturan</span>
+          </div>
+          <button class="logout-btn" onclick="doLogout()"><i class="ti ti-logout"></i> Keluar</button>
+        </div>
+        <div id="admin-content"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══ FOOTER ═══ -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-brand"><i class="ti ti-cookie"></i> <span id="toko-name-footer">TOKO BAGIR</span></div>
+      <p>Jl. Raya Jamblang - Bunut, <br>
+        Sindangmekar Kec. Depok, Kabupaten Cirebon Jawa Barat 45155</p>
+      <p style="margin-top:8px;font-size:11px;opacity:.5">© 2026 Toko Bagir · Grosir Kue Kering</p>
+    </div>
+  </footer>
+
+</div><!-- /app -->
+
+<!-- ═══ MODAL SUKSES ═══ -->
+<div class="modal-overlay" id="success-modal">
+  <div class="modal-box">
+    <div class="modal-icon" style="background:var(--green-50);color:var(--green-700)"><i class="ti ti-check"></i></div>
+    <div class="modal-title">Pesanan Berhasil! 🎉</div>
+    <div class="modal-msg" id="success-msg"></div>
+    <button class="submit-btn" onclick="closeSuccess()">Oke, Makasih!</button>
+  </div>
+</div>
+
+<!-- ═══ MODAL DETAIL PRODUK ═══ -->
+<div class="modal-overlay" id="detail-modal" onclick="if(event.target===this)closeDetail()">
+  <div class="modal-box" id="detail-box"></div>
+</div>
+
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
