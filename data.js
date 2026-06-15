@@ -1,34 +1,36 @@
 // ================================================
 // TOKO BAGIR - data.js
-// Semua komunikasi dengan Google Sheets API
+// ✅ FIX: mode: 'cors' untuk semua POST
+// ✅ NEW: support harga per ukuran (500g, 1kg, 1 bal)
 // ================================================
 
 async function apiGet(action, extraParams) {
   const extra = extraParams ? '&' + extraParams : '';
-  const res = await fetch(`${CONFIG.API_URL}?action=${action}${extra}`);
+  const res = await fetch(`${CONFIG.API_URL}?action=${action}${extra}`, {
+    method: 'GET',
+    mode: 'cors',
+  });
   return res.json();
 }
 
-// Aksi yang TIDAK butuh token admin (sama dengan publicActions di Code.gs)
 const PUBLIC_ACTIONS = ['addOrder','markReadNotif','uploadImage','adminLogin','adminLogout'];
 
 async function apiPost(body) {
-  // Sisipkan token admin otomatis untuk aksi yang butuh login,
-  // kecuali sudah ada token (misal saat ganti password)
   if (!body.token && !PUBLIC_ACTIONS.includes(body.action)) {
     const t = sessionStorage.getItem('bagir_admin_token');
     if (t) body = { ...body, token: t };
   }
+  // Pakai text/plain supaya tidak trigger CORS preflight (OPTIONS)
+  // Google Apps Script tidak support doOptions dengan benar
   const res = await fetch(CONFIG.API_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify(body),
-    mode: 'cors'
   });
   const data = await res.json();
   if (data && data.authError) {
     sessionStorage.removeItem('bagir_admin_token');
-    if (typeof showToast === 'function') showToast('Sesi admin berakhir, silakan login kembali','error');
+    if (typeof showToast === 'function') showToast('Sesi admin berakhir, silakan login kembali', 'error');
     if (typeof initAdmin === 'function') initAdmin();
   }
   return data;
@@ -110,18 +112,18 @@ async function dbMarkAllReadNotif() { return apiPost({ action:'markReadNotif', m
 
 // ─── DATA DEFAULT (fallback offline) ─────────
 const DEFAULT_PRODUCTS = [
-  {id:1, name:'Nastar Nanas',    cat:'classic',   emoji:'🍍', price:65000, weight:'250g', stock:15, desc:'Nastar lembut isi selai nanas pilihan, rasa manis legit.'},
-  {id:2, name:'Putri Salju',     cat:'classic',   emoji:'❄️', price:60000, weight:'250g', stock:12, desc:'Lumer di mulut, taburan gula halus yang membuatnya istimewa.'},
-  {id:3, name:'Kastengel',       cat:'savory',    emoji:'🧀', price:70000, weight:'250g', stock:8,  desc:'Gurih keju edam asli pilihan, renyah dan aroma keju kuat.'},
-  {id:4, name:'Lidah Kucing',    cat:'classic',   emoji:'🍪', price:55000, weight:'250g', stock:20, desc:'Renyah tipis dan manis sempurna, cocok untuk semua usia.'},
-  {id:5, name:'Choco Chips',     cat:'chocolate', emoji:'🍫', price:75000, weight:'250g', stock:10, desc:'Kaya coklat premium dengan chips cokelat melimpah.'},
-  {id:6, name:'Semprit Mawar',   cat:'classic',   emoji:'🌸', price:55000, weight:'250g', stock:5,  desc:'Cantik berwarna, manis lembut, cocok untuk parcel.'},
-  {id:7, name:'Almond Butter',   cat:'premium',   emoji:'🥜', price:95000, weight:'200g', stock:5,  desc:'Kacang almond panggang pilihan, kaya rasa dan tekstur kress.'},
-  {id:8, name:'Choco Crinkle',   cat:'chocolate', emoji:'🍩', price:80000, weight:'200g', stock:0,  desc:'Lembut dalam, renyah luar, full coklat yang memanjakan lidah.'},
-  {id:9, name:'Abon Gulung',     cat:'savory',    emoji:'🥐', price:85000, weight:'200g', stock:7,  desc:'Gurih abon sapi suwir premium, tekstur crispy tahan lama.'},
-  {id:10,name:'Red Velvet',      cat:'premium',   emoji:'🎂', price:90000, weight:'200g', stock:6,  desc:'Warna merah elegan dengan rasa cream cheese yang khas.'},
-  {id:11,name:'Biscotti Vanila', cat:'premium',   emoji:'☕', price:85000, weight:'200g', stock:9,  desc:'Double-baked khas Italia, cocok menemani kopi atau teh.'},
-  {id:12,name:'Sus Kering',      cat:'classic',   emoji:'🫧', price:65000, weight:'250g', stock:11, desc:'Ringan renyah dengan isi krim vanila yang harum.'},
+  {id:1,  name:'Nastar Nanas',    cat:'classic',   emoji:'🍍', price:65000,  price500:120000, price1kg:220000, price1bal:400000, weight:'250g', stock:15, desc:'Nastar lembut isi selai nanas pilihan, rasa manis legit.'},
+  {id:2,  name:'Putri Salju',     cat:'classic',   emoji:'❄️', price:60000,  price500:110000, price1kg:200000, price1bal:380000, weight:'250g', stock:12, desc:'Lumer di mulut, taburan gula halus yang membuatnya istimewa.'},
+  {id:3,  name:'Kastengel',       cat:'savory',    emoji:'🧀', price:70000,  price500:130000, price1kg:240000, price1bal:450000, weight:'250g', stock:8,  desc:'Gurih keju edam asli pilihan, renyah dan aroma keju kuat.'},
+  {id:4,  name:'Lidah Kucing',    cat:'classic',   emoji:'🍪', price:55000,  price500:100000, price1kg:190000, price1bal:360000, weight:'250g', stock:20, desc:'Renyah tipis dan manis sempurna, cocok untuk semua usia.'},
+  {id:5,  name:'Choco Chips',     cat:'chocolate', emoji:'🍫', price:75000,  price500:140000, price1kg:260000, price1bal:490000, weight:'250g', stock:10, desc:'Kaya coklat premium dengan chips cokelat melimpah.'},
+  {id:6,  name:'Semprit Mawar',   cat:'classic',   emoji:'🌸', price:55000,  price500:100000, price1kg:190000, price1bal:360000, weight:'250g', stock:5,  desc:'Cantik berwarna, manis lembut, cocok untuk parcel.'},
+  {id:7,  name:'Almond Butter',   cat:'premium',   emoji:'🥜', price:95000,  price500:180000, price1kg:340000, price1bal:620000, weight:'200g', stock:5,  desc:'Kacang almond panggang pilihan, kaya rasa dan tekstur kress.'},
+  {id:8,  name:'Choco Crinkle',   cat:'chocolate', emoji:'🍩', price:80000,  price500:150000, price1kg:280000, price1bal:520000, weight:'200g', stock:0,  desc:'Lembut dalam, renyah luar, full coklat yang memanjakan lidah.'},
+  {id:9,  name:'Abon Gulung',     cat:'savory',    emoji:'🥐', price:85000,  price500:160000, price1kg:300000, price1bal:560000, weight:'200g', stock:7,  desc:'Gurih abon sapi suwir premium, tekstur crispy tahan lama.'},
+  {id:10, name:'Red Velvet',      cat:'premium',   emoji:'🎂', price:90000,  price500:170000, price1kg:320000, price1bal:590000, weight:'200g', stock:6,  desc:'Warna merah elegan dengan rasa cream cheese yang khas.'},
+  {id:11, name:'Biscotti Vanila', cat:'premium',   emoji:'☕', price:85000,  price500:160000, price1kg:300000, price1bal:560000, weight:'200g', stock:9,  desc:'Double-baked khas Italia, cocok menemani kopi atau teh.'},
+  {id:12, name:'Sus Kering',      cat:'classic',   emoji:'🫧', price:65000,  price500:120000, price1kg:220000, price1bal:400000, weight:'250g', stock:11, desc:'Ringan renyah dengan isi krim vanila yang harum.'},
 ];
 
 // ─── HELPER ──────────────────────────────────
@@ -129,14 +131,10 @@ function fmt(n) { return 'Rp ' + Number(n).toLocaleString('id-ID'); }
 
 function fmtDate(d) {
   if (!d) return '-';
-  try {
-    return new Date(d).toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
-  } catch(e) { return d; }
+  try { return new Date(d).toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'}); } catch(e) { return d; }
 }
 
 function fmtDateTime(d) {
   if (!d) return '-';
-  try {
-    return new Date(d).toLocaleString('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  } catch(e) { return d; }
+  try { return new Date(d).toLocaleString('id-ID',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e) { return d; }
 }
