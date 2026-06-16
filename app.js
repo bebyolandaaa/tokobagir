@@ -16,64 +16,107 @@ let selectedShipping = null;
 let proofUrl = '';
 let dpProofUrl = '';
 let appSettings = {};
+let lastNotifCount = 0; // untuk deteksi notif baru
+
+// ── Proxy gambar Drive lewat Worker (fix 404/block) ───────────
+function proxyImg(url) {
+  if (!url) return '';
+  // Kalau URL Google Drive, konversi ke thumbnail yang bisa diakses
+  const driveMatch = url.match(/id=([\w-]+)/);
+  if (driveMatch) {
+    return `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w800`;
+  }
+  return url;
+}
+
+// ── Web Push Notification ke HP admin ─────────────────────────
+async function requestNotifPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+}
+
+function sendBrowserNotif(title, body, icon) {
+  if (Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(title, {
+      body,
+      icon: icon || '🍪',
+      badge: '🍪',
+      vibrate: [200, 100, 200],
+      tag: 'toko-bagir-' + Date.now(),
+    });
+    n.onclick = () => { window.focus(); n.close(); };
+    // Auto close setelah 8 detik
+    setTimeout(() => n.close(), 8000);
+  } catch(e) {}
+}
+
+// Bunyi notifikasi
+function playNotifSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
+    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.5);
+  } catch(e) {}
+}
+
+
 
 // Render gambar produk (fallback ke ikon jika belum ada foto)
 function productImg(p) {
   return p && p.image
-    ? `<img src="${p.image}" alt="${p.name||''}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">`
+    ? `<img src="${proxyImg(p.image)}" alt="${p.name||''}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block" onerror="this.style.display='none'">`
     : `<i class="ti ti-cookie" style="font-size:34px;color:var(--gray-300)"></i>`;
 }
 
 // ── INIT ─────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    showLoadingGrid('Memuat produk dari database...');
-    allProducts = await dbGetProducts();
-    renderProducts();
-  } catch(e) {
-    console.error('Gagal load produk:', e);
-    allProducts = DEFAULT_PRODUCTS;
-    renderProducts();
-    showToast('Memuat dari cache lokal (offline)', 'warn');
-  }
-
-  try {
-    renderCart();
-    renderOrderSummary();
-  } catch(e) { console.error(e); }
-
-  try {
-    applySettings(await dbGetSettings());
-  } catch(e) { console.error('Gagal load settings:', e); }
-
-  try {
-    shippingRates = await dbGetShippingRates();
-    populateProvinceOptions();
-  } catch(e) { console.error('Gagal load ongkir:', e); }
-
+  showLoadingGrid('Memuat produk dari database...');
+  allProducts = await dbGetProducts();
+  renderProducts();
+  renderCart();
+  renderOrderSummary();
+  applySettings(await dbGetSettings());
+  shippingRates = await dbGetShippingRates();
+  populateProvinceOptions();
   startPoll();
 });
 
-// Terapkan setting toko (nama, tagline, header bg, dll) ke tampilan
+// Terapkan setting toko (nama, tagline, dll) ke tampilan
 function applySettings(s) {
   appSettings = s || {};
-  const name    = appSettings.tokoName    || CONFIG.TOKO_NAME    || 'TOKO BAGIR';
+  const name = appSettings.tokoName || CONFIG.TOKO_NAME || 'TOKO BAGIR';
   const tagline = appSettings.tokoTagline || CONFIG.TOKO_TAGLINE || '';
   document.querySelectorAll('#toko-name-display, #toko-name-footer').forEach(e => e.textContent = name);
   const tag = document.getElementById('toko-tagline-display');
   if (tag) tag.textContent = tagline;
   document.title = name + (tagline ? ' – ' + tagline : '');
 
-  // ✅ Header background foto
-  const topbar = document.querySelector('.topbar');
-  if (topbar) {
-    if (appSettings.headerBg) {
-      topbar.style.backgroundImage  = `url('${appSettings.headerBg}')`;
-      topbar.style.backgroundSize   = 'cover';
-      topbar.style.backgroundPosition = 'center';
-      topbar.style.backgroundRepeat = 'no-repeat';
-    } else {
-      topbar.style.backgroundImage  = '';
+  // Update QRIS image dari settings
+  if (appSettings.qrisImage) {
+    const qrisImg = document.querySelector('#qris-box img');
+    if (qrisImg) qrisImg.src = proxyImg(appSettings.qrisImage);
+  }
+
+  // Update background hero jika ada foto
+  if (appSettings.heroBgImage || appSettings.headerBg) {
+    const bgUrl = appSettings.heroBgImage || appSettings.headerBg;
+    const hero  = document.querySelector('.contact-hero, .hero-section, #hero-bg');
+    if (hero) {
+      hero.style.backgroundImage = `url('${bgUrl}')`;
+      hero.style.backgroundSize  = 'cover';
+      hero.style.backgroundPosition = 'center';
     }
   }
 }
@@ -90,7 +133,17 @@ function startPoll() {
     allProducts = await dbGetProducts();
     renderProducts();
     if (sessionStorage.getItem('bagir_admin_token')) {
-      updateNotifBadge();
+      await updateNotifBadge();
+      // Refresh dashboard jika sedang terbuka
+      if (adminSubTab === 'dashboard') {
+        const el = document.getElementById('admin-content');
+        if (el) await renderDashboard(el);
+      }
+      // Refresh orders jika sedang terbuka
+      if (adminSubTab === 'orders') {
+        const el = document.getElementById('admin-content');
+        if (el) await renderOrdersAdmin(el);
+      }
     }
   }, CONFIG.POLL_INTERVAL || 30000);
 }
@@ -148,98 +201,36 @@ function renderProducts() {
   }).join('');
 }
 
-// Pilihan ukuran dan harga untuk detail produk
-const SIZE_OPTIONS = [
-  { key: 'price',    label: '250g',  desc: '1 toples' },
-  { key: 'price500', label: '500g',  desc: '2 toples' },
-  { key: 'price1kg', label: '1 kg',  desc: '4 toples' },
-  { key: 'price1bal',label: '1 bal', desc: 'Grosir'   },
-];
-
-let detailSelectedSize = 'price'; // default 250g
-
 function showDetail(id) {
   const p = allProducts.find(x => x.id === id);
   if (!p) return;
-  detailSelectedSize = 'price';
-  renderDetailBox(p);
-  document.getElementById('detail-modal').classList.add('show');
-}
-
-function renderDetailBox(p) {
-  const activeSizePrice = Number(p[detailSelectedSize]) || Number(p.price) || 0;
-  const sizeBtns = SIZE_OPTIONS.map(s => {
-    const pr = Number(p[s.key]) || 0;
-    if (!pr) return ''; // sembunyikan ukuran yang tidak ada harganya
-    const isSel = detailSelectedSize === s.key;
-    return `<button onclick="selectDetailSize('${p.id}','${s.key}')"
-      style="flex:1;min-width:70px;padding:8px 4px;border:2px solid ${isSel?'var(--blue-600)':'var(--gray-200)'};border-radius:8px;background:${isSel?'var(--blue-600)':'#fff'};color:${isSel?'#fff':'var(--gray-700)'};cursor:pointer;font-size:12px;font-weight:700;transition:.15s">
-      <div>${s.label}</div>
-      <div style="font-size:10px;font-weight:500;opacity:.8">${s.desc}</div>
-      <div style="font-size:11px;margin-top:2px">${fmt(pr)}</div>
-    </button>`;
-  }).filter(Boolean).join('');
-
   document.getElementById('detail-box').innerHTML = `
     <div style="width:120px;height:120px;margin:0 auto 12px;border-radius:14px;overflow:hidden;background:linear-gradient(135deg,var(--blue-50),#EEF4FF);display:flex;align-items:center;justify-content:center">${productImg(p)}</div>
     <div style="font-size:18px;font-weight:800;margin-bottom:4px">${p.name}</div>
-    <div style="font-size:12px;color:var(--gray-500);margin-bottom:10px">${p.cat}</div>
-    <div style="font-size:13px;color:var(--gray-700);line-height:1.6;margin-bottom:14px">${p.desc||''}</div>
-    ${sizeBtns ? `
-    <div style="margin-bottom:14px">
-      <div style="font-size:12px;font-weight:700;color:var(--gray-600);margin-bottom:8px">📦 Pilih Ukuran:</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${sizeBtns}</div>
-    </div>` : ''}
-    <div style="font-size:22px;font-weight:900;color:var(--blue-600);margin-bottom:20px" id="detail-price-disp">${fmt(activeSizePrice)}</div>
+    <div style="font-size:12px;color:var(--gray-500);margin-bottom:10px">${p.weight} · ${p.cat}</div>
+    <div style="font-size:13px;color:var(--gray-700);line-height:1.6;margin-bottom:16px">${p.desc||''}</div>
+    <div style="font-size:22px;font-weight:900;color:var(--blue-600);margin-bottom:20px">${fmt(p.price)}</div>
     <div style="display:flex;gap:10px;justify-content:center">
-      <button class="submit-btn" style="width:auto;padding:10px 24px" id="detail-add-btn"
-        onclick="addToCartWithSize(${p.id});closeDetail()" ${p.stock===0?'disabled':''}>
+      <button class="submit-btn" style="width:auto;padding:10px 24px"
+        onclick="addToCart(${p.id});closeDetail()" ${p.stock===0?'disabled':''}>
         <i class="ti ti-cart-plus"></i>${p.stock===0?'Stok Habis':'Tambah ke Keranjang'}
       </button>
       <button onclick="closeDetail()" style="padding:10px 20px;border:1.5px solid var(--gray-200);border-radius:var(--r-md);background:#fff;cursor:pointer;font-size:13px;font-weight:600">Tutup</button>
     </div>`;
+  document.getElementById('detail-modal').classList.add('show');
 }
-
-function selectDetailSize(id, sizeKey) {
-  detailSelectedSize = sizeKey;
-  const p = allProducts.find(x => String(x.id) === String(id));
-  if (p) renderDetailBox(p);
-}
-
-function addToCartWithSize(id) {
-  const p = allProducts.find(x => x.id === id);
-  if (!p || p.stock === 0) return;
-  const sizeOpt  = SIZE_OPTIONS.find(s => s.key === detailSelectedSize) || SIZE_OPTIONS[0];
-  const price    = Number(p[detailSelectedSize]) || Number(p.price);
-  const sizeLbl  = sizeOpt.label;
-  // Gunakan key gabungan id+ukuran supaya beda ukuran = beda baris keranjang
-  const cartKey  = `${id}_${detailSelectedSize}`;
-  const ex       = cart.find(c => c.cartKey === cartKey);
-  if (ex) {
-    if (ex.qty < p.stock) ex.qty++;
-    else { showToast(`Stok ${p.name} hanya ${p.stock}`, 'warn'); return; }
-  } else {
-    cart.push({ ...p, cartKey, price, sizeLabel: sizeLbl, qty: 1 });
-  }
-  updateCartBadge();
-  showToast(`${p.name} (${sizeLbl}) ditambahkan!`);
-  renderCart();
-  renderOrderSummary();
-}
-
 function closeDetail() { document.getElementById('detail-modal').classList.remove('show'); }
 
 // ── KERANJANG ─────────────────────────────────
 function addToCart(id) {
   const p = allProducts.find(x => x.id === id);
   if (!p || p.stock === 0) return;
-  const cartKey = `${id}_price`;
-  const ex = cart.find(c => c.cartKey === cartKey);
+  const ex = cart.find(c => c.id === id);
   if (ex) {
     if (ex.qty < p.stock) ex.qty++;
     else { showToast(`Stok ${p.name} hanya ${p.stock}`, 'warn'); return; }
   } else {
-    cart.push({ ...p, cartKey, sizeLabel: '250g', qty: 1 });
+    cart.push({ ...p, qty: 1 });
   }
   updateCartBadge();
   showToast(`${p.name} ditambahkan!`);
@@ -268,14 +259,14 @@ function renderCart() {
     <div class="cart-item">
       <div class="cart-item-icon">${productImg(c)}</div>
       <div class="cart-item-info">
-        <div class="cart-item-name">${c.name} <span style="font-size:11px;color:var(--blue-500);font-weight:700">[${c.sizeLabel||'250g'}]</span></div>
-        <div class="cart-item-price">${fmt(c.price)} / porsi</div>
+        <div class="cart-item-name">${c.name}</div>
+        <div class="cart-item-price">${fmt(c.price)} / toples</div>
       </div>
       <div class="qty-ctrl">
-        <button class="qty-btn" onclick="changeQty('${c.cartKey}',-1)">−</button>
+        <button class="qty-btn" onclick="changeQty(${c.id},-1)">−</button>
         <span class="qty-num">${c.qty}</span>
-        <button class="qty-btn" onclick="changeQty('${c.cartKey}',1)">+</button>
-        <button class="del-btn" onclick="removeItem('${c.cartKey}')"><i class="ti ti-trash"></i></button>
+        <button class="qty-btn" onclick="changeQty(${c.id},1)">+</button>
+        <button class="del-btn" onclick="removeItem(${c.id})"><i class="ti ti-trash"></i></button>
       </div>
     </div>`).join('') +
   `<div class="cart-summary">
@@ -286,17 +277,17 @@ function renderCart() {
   </div>`;
 }
 
-function changeQty(cartKey, d) {
-  const item = cart.find(c => c.cartKey === cartKey);
+function changeQty(id, d) {
+  const p = allProducts.find(x => x.id === id);
+  const item = cart.find(c => c.id === id);
   if (!item) return;
-  const p = allProducts.find(x => x.id === item.id);
   item.qty += d;
-  if (item.qty <= 0) cart = cart.filter(c => c.cartKey !== cartKey);
+  if (item.qty <= 0) cart = cart.filter(c => c.id !== id);
   else if (p && item.qty > p.stock) item.qty = p.stock;
   updateCartBadge(); renderCart(); renderOrderSummary();
 }
-function removeItem(cartKey) {
-  cart = cart.filter(c => c.cartKey !== cartKey);
+function removeItem(id) {
+  cart = cart.filter(c => c.id !== id);
   updateCartBadge(); renderCart(); renderOrderSummary();
 }
 function clearCart() {
@@ -322,7 +313,7 @@ function renderOrderSummary() {
   }
   let html = cart.map(c =>
     `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--blue-800);margin-bottom:5px">
-      <span>${c.name} <span style="font-size:11px;color:var(--blue-400)">[${c.sizeLabel||'250g'}]</span> ×${c.qty}</span><span>${fmt(c.price*c.qty)}</span>
+      <span>${c.name} ×${c.qty}</span><span>${fmt(c.price*c.qty)}</span>
     </div>`).join('');
   if (deliveryMode === 'delivery' && selectedShipping) {
     html += `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--blue-800);margin-bottom:5px;border-top:1px dashed var(--gray-200);padding-top:6px">
@@ -487,7 +478,7 @@ async function submitOrder() {
   try {
     const res = await dbAddOrder({
       name, phone,
-      items: cart.map(c => ({ name: c.name + (c.sizeLabel ? ` (${c.sizeLabel})` : ''), qty: c.qty, price: c.price })),
+      items: cart.map(c => ({ name:c.name, qty:c.qty, price:c.price })),
       total,
       orderDate: orderDate || new Date().toISOString().slice(0,10),
       deliveryDate,
@@ -510,6 +501,7 @@ async function submitOrder() {
     localStorage.setItem('bagir_products_cache', JSON.stringify(allProducts));
 
     // simpan ke history lokal
+    localStorage.setItem('bagir_my_phone', phone); // simpan HP untuk sync history
     const history = JSON.parse(localStorage.getItem('bagir_my_orders') || '[]');
     history.unshift({ id: res.id, name, items: cart.map(c=>c.name+' ×'+c.qty).join(', '), total, date: orderDate || new Date().toISOString().slice(0,10), status: 'baru' });
     localStorage.setItem('bagir_my_orders', JSON.stringify(history));
@@ -547,10 +539,47 @@ function closeSuccess() {
 }
 
 // ── HISTORY PESANAN (customer) ────────────────
-function renderHistory() {
+async function renderHistory() {
   const el = document.getElementById('history-content');
   if (!el) return;
-  const orders = JSON.parse(localStorage.getItem('bagir_my_orders') || '[]');
+
+  // Coba ambil dari server berdasarkan nomor HP yang tersimpan
+  const savedPhone = localStorage.getItem('bagir_my_phone') || '';
+  let orders = JSON.parse(localStorage.getItem('bagir_my_orders') || '[]');
+
+  // Sinkron status dari server
+  if (orders.length && savedPhone) {
+    try {
+      el.innerHTML = `<div style="text-align:center;padding:20px;color:var(--gray-400)"><div class="spinner" style="margin:0 auto 8px"></div>Memperbarui status...</div>`;
+      const allOrders = await dbGetOrders();
+      const myOrders  = allOrders.filter(o => o.phone && o.phone.replace(/\D/g,'').endsWith(savedPhone.replace(/\D/g,'').slice(-8)));
+      if (myOrders.length) {
+        // Merge — update status dari server
+        myOrders.forEach(serverOrder => {
+          const local = orders.find(x => x.id === serverOrder.id);
+          if (local) {
+            local.status      = serverOrder.status;
+            local.resi        = serverOrder.resi;
+            local.total       = serverOrder.total;
+            local.items       = Array.isArray(serverOrder.items)
+              ? serverOrder.items.map(i=>i.name+' ×'+i.qty).join(', ')
+              : serverOrder.items;
+          } else {
+            orders.unshift({
+              id: serverOrder.id, name: serverOrder.name,
+              items: Array.isArray(serverOrder.items)
+                ? serverOrder.items.map(i=>i.name+' ×'+i.qty).join(', ')
+                : serverOrder.items,
+              total: serverOrder.total, date: serverOrder.orderDate,
+              status: serverOrder.status, resi: serverOrder.resi || ''
+            });
+          }
+        });
+        localStorage.setItem('bagir_my_orders', JSON.stringify(orders));
+      }
+    } catch(e) { /* tetap tampilkan dari cache */ }
+  }
+
   if (!orders.length) {
     el.innerHTML = `<div class="cart-empty">
       <i class="ti ti-clock-off"></i>
@@ -569,11 +598,31 @@ function renderHistory() {
       <div class="history-items">${o.items}</div>
       <div class="history-footer">
         <span class="history-total">${fmt(o.total)}</span>
+        ${o.resi?`<span style="font-size:11px;background:#EEF4FF;color:var(--blue-700);padding:3px 8px;border-radius:20px;font-weight:700">📦 Resi: ${o.resi}</span>`:''}
         <span style="font-size:11px;color:var(--gray-400)">
-          ${o.status === 'selesai' ? '✅ Pesanan selesai' : o.status === 'batal' ? '❌ Dibatalkan' : '⏳ Dalam proses'}
+          ${o.status==='selesai'?'✅ Pesanan selesai':o.status==='batal'?'❌ Dibatalkan':'⏳ Dalam proses'}
         </span>
       </div>
+      <button onclick="refreshHistorySingle('${o.id}')" style="margin-top:8px;font-size:11px;padding:5px 12px;border:1.5px solid var(--gray-200);border-radius:20px;background:#fff;cursor:pointer;color:var(--gray-600)">
+        <i class="ti ti-refresh"></i> Perbarui Status
+      </button>
     </div>`).join('');
+}
+
+async function refreshHistorySingle(id) {
+  showToast('Memperbarui status...','warn');
+  try {
+    const allOrders = await dbGetOrders();
+    const o         = allOrders.find(x => x.id === id);
+    if (o) {
+      const orders = JSON.parse(localStorage.getItem('bagir_my_orders') || '[]');
+      const local  = orders.find(x => x.id === id);
+      if (local) { local.status = o.status; local.resi = o.resi || ''; }
+      localStorage.setItem('bagir_my_orders', JSON.stringify(orders));
+      showToast('Status diperbarui ✅');
+      renderHistory();
+    }
+  } catch(e) { showToast('Gagal ambil data','error'); }
 }
 
 function buildStatusTracker(status) {
@@ -609,9 +658,23 @@ function buildStatusTracker(status) {
 // ── NOTIFIKASI ────────────────────────────────
 async function updateNotifBadge() {
   const notifs = await dbGetNotifications();
-  const unread = notifs.filter(n => !n.isRead && n.isRead !== true && n.isRead !== 'true').length;
+  const unread = notifs.filter(n => !n.isRead && n.isRead !== true && n.isRead !== 'true');
+  const unreadCount = unread.length;
   const dot = document.getElementById('notif-dot');
-  if (dot) { dot.textContent = unread; dot.style.display = unread ? 'flex' : 'none'; }
+  if (dot) { dot.textContent = unreadCount; dot.style.display = unreadCount ? 'flex' : 'none'; }
+
+  // Deteksi notif baru → bunyi + push ke HP
+  if (unreadCount > lastNotifCount && lastNotifCount >= 0) {
+    const newest = unread[0];
+    if (newest) {
+      playNotifSound();
+      sendBrowserNotif(
+        '🛒 Toko Bagir — ' + (newest.type === 'order' ? 'Pesanan Baru!' : 'Notifikasi'),
+        newest.message,
+      );
+    }
+  }
+  lastNotifCount = unreadCount;
 }
 
 function toggleNotifPanel() {
@@ -690,6 +753,8 @@ async function doLogin() {
       sessionStorage.setItem('bagir_admin_token', res.token);
       document.getElementById('login-error').style.display = 'none';
       document.getElementById('admin-password').value = '';
+      // Minta izin notifikasi ke browser/HP
+      requestNotifPermission();
       await initAdmin();
     } else {
       document.getElementById('login-error').textContent = '❌ ' + (res.message || 'Login gagal');
@@ -834,7 +899,7 @@ function buildOrderTable(list) {
         <td>${o.delivery==='delivery'?`🚚 ${o.city||'Kirim'}`:'🏠 Ambil'}</td>
         <td style="font-size:11px">
           <div style="text-transform:capitalize;font-weight:700">${o.payment}</div>
-          ${o.paymentProof?`<a href="${o.paymentProof}" target="_blank" class="action-btn" style="display:inline-block;margin-top:3px"><i class="ti ti-photo"></i> Bukti</a>`:'<span style="color:var(--gray-400)">- belum ada -</span>'}
+          ${o.paymentProof?`<a href="${proxyImg(o.paymentProof)}" target="_blank" class="action-btn" style="display:inline-block;margin-top:3px"><i class="ti ti-photo"></i> Bukti</a>`:'<span style="color:var(--gray-400)">- belum ada -</span>'}
           ${o.dpAmount?`<div style="margin-top:3px;color:var(--green-700)">DP: ${fmt(o.dpAmount)}</div>`:''}
         </td>
         <td>
@@ -873,40 +938,109 @@ function printInvoice(id) {
   dbGetOrders().then(orders => {
     const o = orders.find(x => x.id === id);
     if (!o) { showToast('Pesanan tidak ditemukan','error'); return; }
-    const items = Array.isArray(o.items) ? o.items : [];
-    const rows = items.map(i => `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee">${i.name}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center">${i.qty}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fmt(i.price)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right">${fmt(i.price*i.qty)}</td>
+    const items    = Array.isArray(o.items) ? o.items : [];
+    const subtotal = items.reduce((s,i) => s + (i.price||0)*(i.qty||1), 0);
+    const ongkir   = Number(o.shippingCost) || 0;
+    const total    = Number(o.total) || subtotal + ongkir;
+    const statusLabel = {baru:'Menunggu Konfirmasi',proses:'Sedang Diproses',selesai:'Selesai',batal:'Dibatalkan'}[o.status] || o.status;
+    const payLabel    = {transfer:'Transfer Bank',cod:'COD (Bayar di Tempat)',qris:'QRIS'}[o.payment] || o.payment;
+
+    const rows = items.map(i => `
+      <tr>
+        <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0">
+          <div style="font-weight:600;font-size:13px">${i.name}</div>
+          <div style="font-size:11px;color:#888">${fmt(i.price)} × ${i.qty}</div>
+        </td>
+        <td style="padding:10px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:700;font-size:13px">${fmt((i.price||0)*(i.qty||1))}</td>
       </tr>`).join('');
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${o.id}</title>
+
+    const html = `<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>Invoice ${o.id} - Toko Bagir</title>
       <style>
-        body{font-family:Arial,sans-serif;padding:30px;color:#222}
-        h1{font-size:20px;margin:0 0 4px}
-        .muted{color:#777;font-size:12px}
-        table{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
-        th{text-align:left;border-bottom:2px solid #333;padding:6px 8px}
-        .total{font-weight:bold;font-size:15px}
-        .row{display:flex;justify-content:space-between;margin-top:6px;font-size:13px}
-        @media print{button{display:none}}
-      </style></head><body>
-      <h1>${CONFIG.TOKO_NAME || 'TOKO BAGIR'}</h1>
-      <div class="muted">${CONFIG.TOKO_TAGLINE||''}</div>
-      <div class="muted">${CONFIG.TOKO_ALAMAT||''}</div>
-      <hr style="margin:16px 0">
-      <div class="row"><span><strong>Invoice:</strong> ${o.id}</span><span><strong>Tanggal:</strong> ${fmtDate(o.orderDate||o.date)}</span></div>
-      <div class="row"><span><strong>Pelanggan:</strong> ${o.name}</span><span><strong>No. WA:</strong> ${o.phone}</span></div>
-      ${o.address?`<div class="row"><span><strong>Alamat:</strong> ${o.address}</span><span></span></div>`:''}
-      ${o.resi?`<div class="row"><span><strong>No. Resi:</strong> ${o.resi}</span><span></span></div>`:''}
-      <div class="row"><span><strong>Status:</strong> ${o.status}</span><span><strong>Pembayaran:</strong> ${o.payment}</span></div>
-      <table><thead><tr><th>Produk</th><th style="text-align:center">Qty</th><th style="text-align:right">Harga</th><th style="text-align:right">Subtotal</th></tr></thead>
-      <tbody>${rows}</tbody></table>
-      <div class="row total"><span>Total</span><span>${fmt(o.total)}</span></div>
-      <p class="muted" style="margin-top:30px">Terima kasih telah berbelanja di ${CONFIG.TOKO_NAME || 'TOKO BAGIR'}!</p>
-      <button onclick="window.print()" style="margin-top:10px;padding:8px 18px;border:none;background:#1A6CC8;color:#fff;border-radius:6px;cursor:pointer">Cetak / Simpan PDF</button>
-      </body></html>`;
-    const w = window.open('', '_blank');
+        *{box-sizing:border-box;margin:0;padding:0}
+        body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f5f5;color:#222;padding:20px}
+        .card{max-width:520px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)}
+        .header{background:linear-gradient(135deg,#ee4d2d,#ff7337);color:#fff;padding:20px 24px}
+        .header h1{font-size:22px;font-weight:800;letter-spacing:1px}
+        .header p{font-size:12px;opacity:0.85;margin-top:2px}
+        .badge{display:inline-block;background:rgba(255,255,255,0.25);border-radius:20px;padding:3px 12px;font-size:11px;font-weight:700;margin-top:8px}
+        .body{padding:20px 24px}
+        .section{margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #f0f0f0}
+        .section:last-child{border-bottom:none;margin-bottom:0}
+        .label{font-size:10px;font-weight:700;color:#ee4d2d;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px}
+        .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .info-item .key{font-size:11px;color:#888;margin-bottom:2px}
+        .info-item .val{font-size:13px;font-weight:600}
+        table{width:100%;border-collapse:collapse}
+        .total-section{background:#fff8f6;border-radius:8px;padding:14px 16px;margin-top:14px}
+        .total-row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;color:#555}
+        .total-row.grand{font-size:16px;font-weight:800;color:#ee4d2d;border-top:1px solid #f0c0b0;padding-top:10px;margin-top:6px}
+        .status-box{background:#fff3f0;border:1.5px solid #ee4d2d;border-radius:8px;padding:10px 14px;font-size:12px;font-weight:700;color:#ee4d2d;display:flex;align-items:center;gap:6px}
+        .footer-note{text-align:center;font-size:11px;color:#aaa;margin-top:16px;padding-top:14px;border-top:1px dashed #eee}
+        .print-btn{display:block;width:100%;margin-top:16px;padding:12px;background:#ee4d2d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer}
+        @media print{.print-btn{display:none}body{background:#fff;padding:0}.card{box-shadow:none}}
+      </style></head>
+    <body>
+      <div class="card">
+        <div class="header">
+          <h1>🍪 ${CONFIG.TOKO_NAME||'TOKO BAGIR'}</h1>
+          <p>${CONFIG.TOKO_TAGLINE||'Grosir Kue Kering'} · ${CONFIG.TOKO_ALAMAT||''}</p>
+          <div class="badge">📦 Invoice #${o.id}</div>
+        </div>
+        <div class="body">
+
+          <div class="section">
+            <div class="label">📋 Info Pesanan</div>
+            <div class="info-grid">
+              <div class="info-item"><div class="key">No. Pesanan</div><div class="val" style="color:#ee4d2d;font-size:14px">${o.id}</div></div>
+              <div class="info-item"><div class="key">Tanggal Pesan</div><div class="val">${fmtDate(o.orderDate||o.date)}</div></div>
+              <div class="info-item"><div class="key">Nama Pembeli</div><div class="val">${o.name}</div></div>
+              <div class="info-item"><div class="key">No. WhatsApp</div><div class="val">${o.phone}</div></div>
+              ${o.deliveryDate?`<div class="info-item"><div class="key">Tanggal Kirim</div><div class="val">${fmtDate(o.deliveryDate)}</div></div>`:''}
+              ${o.resi?`<div class="info-item"><div class="key">No. Resi</div><div class="val">${o.resi}</div></div>`:''}
+            </div>
+          </div>
+
+          ${o.address?`
+          <div class="section">
+            <div class="label">📍 Alamat Pengiriman</div>
+            <div style="font-size:13px;line-height:1.5">${o.address}${o.city?', '+o.city:''}${o.province?', '+o.province:''}</div>
+            ${o.courier?`<div style="font-size:11px;color:#888;margin-top:4px">Kurir: ${o.courier} ${o.service||''}</div>`:''}
+          </div>`:''}
+
+          <div class="section">
+            <div class="label">🛍️ Detail Produk</div>
+            <table>${rows}</table>
+            <div class="total-section">
+              <div class="total-row"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
+              ${ongkir?`<div class="total-row"><span>Ongkos Kirim (${o.courier||''})</span><span>${fmt(ongkir)}</span></div>`:''}
+              ${o.dpAmount?`<div class="total-row"><span>DP Dibayar</span><span style="color:green">- ${fmt(o.dpAmount)}</span></div>`:''}
+              <div class="total-row grand"><span>Total Pembayaran</span><span>${fmt(total)}</span></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="label">💳 Pembayaran</div>
+            <div style="font-size:13px;font-weight:600">${payLabel}</div>
+            ${o.dpAmount?`<div style="font-size:11px;color:green;margin-top:3px">DP: ${fmt(o.dpAmount)} · Sisa: ${fmt(Math.max(0,total-o.dpAmount))}</div>`:''}
+          </div>
+
+          <div class="status-box">
+            ${{baru:'🔵',proses:'🟡',selesai:'🟢',batal:'🔴'}[o.status]||'⚪'}
+            Status: ${statusLabel}
+          </div>
+
+          <div class="footer-note">
+            Terima kasih sudah berbelanja di ${CONFIG.TOKO_NAME||'TOKO BAGIR'}! 🍪<br>
+            Pertanyaan? Hub kami di WA: ${CONFIG.TOKO_WA||''}
+          </div>
+
+          <button class="print-btn" onclick="window.print()">🖨️ Cetak / Simpan PDF</button>
+        </div>
+      </div>
+    </body></html>`;
+    const w = window.open('','_blank');
     w.document.write(html);
     w.document.close();
   });
@@ -979,19 +1113,6 @@ async function renderSettingsAdmin(el) {
         <input class="form-input" id="set-toko-alamat" type="text" value="${appSettings.tokoAlamat || CONFIG.TOKO_ALAMAT || ''}">
       </div>
       <button class="save-btn" onclick="saveBrandSettings()"><i class="ti ti-device-floppy"></i> Simpan Identitas Toko</button>
-
-      <div style="margin-top:18px;padding-top:14px;border-top:1px dashed var(--gray-200)">
-        <label class="form-label">🖼️ Foto Background Header (opsional)</label>
-        <p style="font-size:11px;color:var(--gray-400);margin-bottom:8px">Ganti warna biru header dengan foto. Ukuran ideal: 1200×200px atau lebih lebar.</p>
-        <div class="img-upload-box">
-          <input type="file" id="set-header-bg" accept="image/*" class="form-input" onchange="onHeaderBgSelected(event)">
-          <small style="color:#666">Pilih foto dari galeri. Akan disimpan ke Google Drive.</small>
-          <div class="img-preview-wrap ${appSettings.headerBg?'':'empty'}" id="header-bg-preview">
-            ${appSettings.headerBg ? `<img src="${appSettings.headerBg}" style="width:100%;height:80px;object-fit:cover;border-radius:6px">` : `<i class="ti ti-photo"></i>`}
-          </div>
-        </div>
-        ${appSettings.headerBg ? `<button onclick="removeHeaderBg()" style="margin-top:8px;padding:6px 14px;font-size:12px;border:1.5px solid var(--red-700);background:#fff;color:var(--red-700);border-radius:6px;cursor:pointer">🗑️ Hapus Foto Background</button>` : ''}
-      </div>
     </div>
 
     <div class="add-product-form" style="margin-bottom:16px">
@@ -1065,55 +1186,15 @@ async function removeOngkirRate(id) {
 
 async function saveBrandSettings() {
   const data = {
-    tokoName:      document.getElementById('set-toko-name').value.trim(),
-    tokoTagline:   document.getElementById('set-toko-tagline').value.trim(),
-    tokoWa:        document.getElementById('set-toko-wa').value.trim(),
+    tokoName: document.getElementById('set-toko-name').value.trim(),
+    tokoTagline: document.getElementById('set-toko-tagline').value.trim(),
+    tokoWa: document.getElementById('set-toko-wa').value.trim(),
     tokoInstagram: document.getElementById('set-toko-ig').value.trim(),
-    tokoAlamat:    document.getElementById('set-toko-alamat').value.trim(),
+    tokoAlamat: document.getElementById('set-toko-alamat').value.trim(),
   };
   await dbSaveSettings(data);
-  applySettings({ ...appSettings, ...data });
+  applySettings(data);
   showToast('Identitas toko disimpan ✅');
-}
-
-async function onHeaderBgSelected(ev) {
-  const file = ev.target.files[0];
-  if (!file) return;
-  const wrap = document.getElementById('header-bg-preview');
-  wrap.classList.remove('empty');
-  wrap.innerHTML = `<div class="spinner" style="width:24px;height:24px;border-width:2px"></div>`;
-  const reader = new FileReader();
-  reader.onload = async () => {
-    const base64 = reader.result.split(',')[1];
-    try {
-      const res = await dbUploadImage(base64, file.name, file.type);
-      if (res.success) {
-        wrap.innerHTML = `<img src="${res.url}" style="width:100%;height:80px;object-fit:cover;border-radius:6px">`;
-        await dbSaveSettings({ headerBg: res.url });
-        appSettings.headerBg = res.url;
-        applySettings(appSettings);
-        showToast('Background header disimpan ✅');
-      } else {
-        wrap.innerHTML = `<i class="ti ti-photo-off"></i>`;
-        wrap.classList.add('empty');
-        showToast(res.message || 'Gagal upload foto', 'error');
-      }
-    } catch(e) {
-      wrap.innerHTML = `<i class="ti ti-photo-off"></i>`;
-      wrap.classList.add('empty');
-      showToast('Gagal upload. Cek koneksi!', 'error');
-    }
-  };
-  reader.readAsDataURL(file);
-}
-
-async function removeHeaderBg() {
-  if (!confirm('Hapus foto background header?')) return;
-  await dbSaveSettings({ headerBg: '' });
-  appSettings.headerBg = '';
-  applySettings(appSettings);
-  showToast('Background header dihapus');
-  renderAdmin();
 }
 
 async function changeAdminPassword() {
@@ -1223,33 +1304,17 @@ function renderAddProductForm(el) {
       </div>
       <div class="form-row-2">
         <div>
-          <label class="form-label">Harga 250g (Rp) *</label>
+          <label class="form-label">Harga (Rp) *</label>
           <input class="form-input" id="p-price" type="number" placeholder="65000" value="${p?p.price:''}">
         </div>
         <div>
-          <label class="form-label">Harga 500g (Rp)</label>
-          <input class="form-input" id="p-price500" type="number" placeholder="120000" value="${p?p.price500||'':''}">
-        </div>
-      </div>
-      <div class="form-row-2">
-        <div>
-          <label class="form-label">Harga 1 kg (Rp)</label>
-          <input class="form-input" id="p-price1kg" type="number" placeholder="220000" value="${p?p.price1kg||'':''}">
-        </div>
-        <div>
-          <label class="form-label">Harga 1 bal / Grosir (Rp)</label>
-          <input class="form-input" id="p-price1bal" type="number" placeholder="400000" value="${p?p.price1bal||'':''}">
-        </div>
-      </div>
-      <div class="form-row-2">
-        <div>
-          <label class="form-label">Berat / Ukuran Dasar</label>
+          <label class="form-label">Berat / Ukuran</label>
           <input class="form-input" id="p-weight" type="text" placeholder="250g" value="${p?p.weight:''}">
         </div>
-        <div>
-          <label class="form-label">Stok Awal (toples) *</label>
-          <input class="form-input" id="p-stock" type="number" placeholder="10" value="${p?p.stock:''}">
-        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Stok Awal (toples) *</label>
+        <input class="form-input" id="p-stock" type="number" placeholder="10" value="${p?p.stock:''}">
       </div>
       <div class="form-row">
         <label class="form-label">Deskripsi Produk</label>
@@ -1308,30 +1373,45 @@ function onProductImageSelected(ev) {
 }
 
 async function saveProduct() {
-  const name     = document.getElementById('p-name').value.trim();
-  const cat      = document.getElementById('p-cat').value;
-  const price    = parseInt(document.getElementById('p-price').value);
-  const price500 = parseInt(document.getElementById('p-price500').value) || 0;
-  const price1kg = parseInt(document.getElementById('p-price1kg').value) || 0;
-  const price1bal= parseInt(document.getElementById('p-price1bal').value) || 0;
-  const weight   = document.getElementById('p-weight').value.trim() || '250g';
-  const stock    = parseInt(document.getElementById('p-stock').value);
-  const desc     = document.getElementById('p-desc').value.trim();
-  if (!name)                { showToast('Nama produk wajib!','error'); return; }
-  if (isNaN(price)||price<=0){ showToast('Harga 250g tidak valid!','error'); return; }
+  const name  = document.getElementById('p-name').value.trim();
+  const cat   = document.getElementById('p-cat').value;
+  const price = parseInt(document.getElementById('p-price').value);
+  const weight= document.getElementById('p-weight').value.trim() || '250g';
+  const stock = parseInt(document.getElementById('p-stock').value);
+  const desc  = document.getElementById('p-desc').value.trim();
+  if (!name)               { showToast('Nama produk wajib!','error'); return; }
+  if (isNaN(price)||price<=0){ showToast('Harga tidak valid!','error'); return; }
   if (isNaN(stock)||stock<0) { showToast('Stok tidak valid!','error'); return; }
   const btn = document.getElementById('save-btn');
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner" style="width:18px;height:18px;border-width:2px;display:inline-block;margin-right:6px"></div> Menyimpan ke Sheets...';
-  const productData = { name, cat, emoji:'', price, price500, price1kg, price1bal, weight, stock, desc, image: selectedImageUrl };
   try {
     if (editingProductId) {
-      await dbUpdateProduct({ id: editingProductId, ...productData });
+      await dbUpdateProduct({
+      id: editingProductId,
+      name,
+      cat,
+      emoji:'',
+      price,
+      weight,
+      stock,
+      desc,
+      image: selectedImageUrl
+    });
       const idx = allProducts.findIndex(x=>x.id===editingProductId);
-      if (idx!==-1) allProducts[idx] = { id:editingProductId, ...productData };
+      if (idx!==-1) allProducts[idx] = {id:editingProductId,name,cat,price,weight,stock,desc,image:selectedImageUrl};
     } else {
-      const res = await dbAddProduct(productData);
-      allProducts.push({ id: res.id || Date.now(), ...productData });
+      const res = await dbAddProduct({
+      name,
+      cat,
+      emoji:'',
+      price,
+      weight,
+      stock,
+      desc,
+      image: selectedImageUrl
+    });
+      allProducts.push({id:res.id||Date.now(),name,cat,price,weight,stock,desc,image:selectedImageUrl});
     }
     localStorage.setItem('bagir_products_cache', JSON.stringify(allProducts));
     renderProducts();
