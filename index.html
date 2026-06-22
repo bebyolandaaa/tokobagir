@@ -11,7 +11,6 @@
 <body>
 <div class="app">
 
-  <!-- ═══ TOPBAR ═══ -->
   <header class="topbar">
     <div class="topbar-brand">
       <div class="logo"><i class="ti ti-cookie"></i></div>
@@ -164,19 +163,16 @@
     </p>
 
     <img
-      src="https://drive.google.com/uc?export=view&id=1y-KqfdJD02s4-XCwuFzbDSyVP-kzMRrT"
+      id="qris-img"
+      src="https://drive.google.com/thumbnail?id=1y-KqfdJD02s4-XCwuFzbDSyVP-kzMRrT&sz=w800"
       alt="QRIS"
-      style="
-        max-width:250px;
-        width:100%;
-        border-radius:10px;
-        border:1px solid #ddd;
-      ">
+      style="max-width:250px;width:100%;border-radius:10px;border:1px solid #ddd"
+      onerror="this.style.opacity='0.3'">
 
   </div>
             <!-- Upload bukti transfer / QRIS -->
             <div class="form-row" id="proof-box" style="display:block">
-              <label class="form-label">Upload Bukti Transfer *</label>
+              <label class="form-label" id="proof-label">Upload Bukti Transfer / QRIS *</label>
               <div class="img-upload-box">
                 <input type="file" id="f-proof" accept="image/*" class="form-input" onchange="onProofSelected(event)">
                 <small style="color:#666">Upload screenshot/foto bukti pembayaran kamu.</small>

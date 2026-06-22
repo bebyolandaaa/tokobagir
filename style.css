@@ -163,6 +163,12 @@ body {
 }
 .add-btn:hover { background: var(--blue-800); }
 .add-btn:disabled { background: var(--gray-300); cursor: not-allowed; }
+.size-select {
+  width: 100%; padding: 6px 8px; margin-bottom: 8px;
+  border: 1.5px solid var(--gray-200); border-radius: 6px;
+  font-size: 11px; background: var(--white); color: var(--gray-700); cursor: pointer;
+}
+.size-select:focus { outline: none; border-color: var(--blue-400); }
 .stock-badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 600; }
 .badge-ok  { background: var(--blue-50); color: var(--blue-800); }
 .badge-low { background: var(--yellow-50); color: var(--yellow-700); }

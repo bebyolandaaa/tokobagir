@@ -112,18 +112,18 @@ async function dbMarkAllReadNotif() { return apiPost({ action:'markReadNotif', m
 
 // ─── DATA DEFAULT (fallback offline) ─────────
 const DEFAULT_PRODUCTS = [
-  {id:1,  name:'Nastar Nanas',    cat:'classic',   emoji:'🍍', price:65000,  price500:120000, price1kg:220000, price1bal:400000, weight:'250g', stock:15, desc:'Nastar lembut isi selai nanas pilihan, rasa manis legit.'},
-  {id:2,  name:'Putri Salju',     cat:'classic',   emoji:'❄️', price:60000,  price500:110000, price1kg:200000, price1bal:380000, weight:'250g', stock:12, desc:'Lumer di mulut, taburan gula halus yang membuatnya istimewa.'},
-  {id:3,  name:'Kastengel',       cat:'savory',    emoji:'🧀', price:70000,  price500:130000, price1kg:240000, price1bal:450000, weight:'250g', stock:8,  desc:'Gurih keju edam asli pilihan, renyah dan aroma keju kuat.'},
-  {id:4,  name:'Lidah Kucing',    cat:'classic',   emoji:'🍪', price:55000,  price500:100000, price1kg:190000, price1bal:360000, weight:'250g', stock:20, desc:'Renyah tipis dan manis sempurna, cocok untuk semua usia.'},
-  {id:5,  name:'Choco Chips',     cat:'chocolate', emoji:'🍫', price:75000,  price500:140000, price1kg:260000, price1bal:490000, weight:'250g', stock:10, desc:'Kaya coklat premium dengan chips cokelat melimpah.'},
-  {id:6,  name:'Semprit Mawar',   cat:'classic',   emoji:'🌸', price:55000,  price500:100000, price1kg:190000, price1bal:360000, weight:'250g', stock:5,  desc:'Cantik berwarna, manis lembut, cocok untuk parcel.'},
-  {id:7,  name:'Almond Butter',   cat:'premium',   emoji:'🥜', price:95000,  price500:180000, price1kg:340000, price1bal:620000, weight:'200g', stock:5,  desc:'Kacang almond panggang pilihan, kaya rasa dan tekstur kress.'},
-  {id:8,  name:'Choco Crinkle',   cat:'chocolate', emoji:'🍩', price:80000,  price500:150000, price1kg:280000, price1bal:520000, weight:'200g', stock:0,  desc:'Lembut dalam, renyah luar, full coklat yang memanjakan lidah.'},
-  {id:9,  name:'Abon Gulung',     cat:'savory',    emoji:'🥐', price:85000,  price500:160000, price1kg:300000, price1bal:560000, weight:'200g', stock:7,  desc:'Gurih abon sapi suwir premium, tekstur crispy tahan lama.'},
-  {id:10, name:'Red Velvet',      cat:'premium',   emoji:'🎂', price:90000,  price500:170000, price1kg:320000, price1bal:590000, weight:'200g', stock:6,  desc:'Warna merah elegan dengan rasa cream cheese yang khas.'},
-  {id:11, name:'Biscotti Vanila', cat:'premium',   emoji:'☕', price:85000,  price500:160000, price1kg:300000, price1bal:560000, weight:'200g', stock:9,  desc:'Double-baked khas Italia, cocok menemani kopi atau teh.'},
-  {id:12, name:'Sus Kering',      cat:'classic',   emoji:'🫧', price:65000,  price500:120000, price1kg:220000, price1bal:400000, weight:'250g', stock:11, desc:'Ringan renyah dengan isi krim vanila yang harum.'},
+  {id:1,  name:'Nastar Nanas',    cat:'Pedas',   emoji:'🍍', price:65000,  price500:120000, price1kg:220000, price1bal:400000, weight:'250g', stock:15, desc:'Nastar lembut isi selai nanas pilihan, rasa manis legit.'},
+  {id:2,  name:'Putri Salju',     cat:'Pedas',   emoji:'❄️', price:60000,  price500:110000, price1kg:200000, price1bal:380000, weight:'250g', stock:12, desc:'Lumer di mulut, taburan gula halus yang membuatnya istimewa.'},
+  {id:3,  name:'Kastengel',       cat:'Best Seller',    emoji:'🧀', price:70000,  price500:130000, price1kg:240000, price1bal:450000, weight:'250g', stock:8,  desc:'Gurih keju edam asli pilihan, renyah dan aroma keju kuat.'},
+  {id:4,  name:'Lidah Kucing',    cat:'Pedas',   emoji:'🍪', price:55000,  price500:100000, price1kg:190000, price1bal:360000, weight:'250g', stock:20, desc:'Renyah tipis dan manis sempurna, cocok untuk semua usia.'},
+  {id:5,  name:'Choco Chips',     cat:'Cemilan', emoji:'🍫', price:75000,  price500:140000, price1kg:260000, price1bal:490000, weight:'250g', stock:10, desc:'Kaya coklat premium dengan chips cokelat melimpah.'},
+  {id:6,  name:'Semprit Mawar',   cat:'Pedas',   emoji:'🌸', price:55000,  price500:100000, price1kg:190000, price1bal:360000, weight:'250g', stock:5,  desc:'Cantik berwarna, manis lembut, cocok untuk parcel.'},
+  {id:7,  name:'Almond Butter',   cat:'Manis',   emoji:'🥜', price:95000,  price500:180000, price1kg:340000, price1bal:620000, weight:'200g', stock:5,  desc:'Kacang almond panggang pilihan, kaya rasa dan tekstur kress.'},
+  {id:8,  name:'Choco Crinkle',   cat:'Cemilan', emoji:'🍩', price:80000,  price500:150000, price1kg:280000, price1bal:520000, weight:'200g', stock:0,  desc:'Lembut dalam, renyah luar, full coklat yang memanjakan lidah.'},
+  {id:9,  name:'Abon Gulung',     cat:'Best Seller',    emoji:'🥐', price:85000,  price500:160000, price1kg:300000, price1bal:560000, weight:'200g', stock:7,  desc:'Gurih abon sapi suwir premium, tekstur crispy tahan lama.'},
+  {id:10, name:'Red Velvet',      cat:'Manis',   emoji:'🎂', price:90000,  price500:170000, price1kg:320000, price1bal:590000, weight:'200g', stock:6,  desc:'Warna merah elegan dengan rasa cream cheese yang khas.'},
+  {id:11, name:'Biscotti Vanila', cat:'Manis',   emoji:'☕', price:85000,  price500:160000, price1kg:300000, price1bal:560000, weight:'200g', stock:9,  desc:'Double-baked khas Italia, cocok menemani kopi atau teh.'},
+  {id:12, name:'Sus Kering',      cat:'Pedas',   emoji:'🫧', price:65000,  price500:120000, price1kg:220000, price1bal:400000, weight:'250g', stock:11, desc:'Ringan renyah dengan isi krim vanila yang harum.'},
 ];
 
 // ─── HELPER ──────────────────────────────────
